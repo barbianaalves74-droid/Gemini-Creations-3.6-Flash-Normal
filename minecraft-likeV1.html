@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Minecraft Voxel Engine v2.0</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #000; }
+    
+    #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+    
+    /* Crosshair */
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 16px; height: 16px; pointer-events: none; z-index: 10;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255, 255, 255, 0.8);
+      box-shadow: 0 0 2px rgba(0,0,0,0.8);
+    }
+    #crosshair::before { top: 7px; left: 0; width: 16px; height: 2px; }
+    #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
+
+    /* HUD */
+    #hud {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 5; display: flex; flex-direction: column;
+      justify-content: space-between; padding: 20px;
+    }
+
+    .status-bars {
+      display: flex; justify-content: space-between; width: 100%; max-width: 600px;
+      margin: 0 auto; margin-top: auto; margin-bottom: 8px;
+    }
+    .bar-group { display: flex; gap: 4px; }
+    .icon-svg { width: 22px; height: 22px; filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.8)); }
+
+    #hotbar-container {
+      margin: 0 auto; background: rgba(0, 0, 0, 0.65); border: 3px solid #3c3c3c;
+      border-radius: 8px; padding: 4px; display: flex; gap: 6px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+    }
+    .slot {
+      width: 48px; height: 48px; border: 2px solid #555; border-radius: 4px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.05); color: #fff; font-size: 10px; font-weight: bold;
+      transition: all 0.1s ease;
+    }
+    .slot.selected {
+      border-color: #ffffff; background: rgba(255,255,255,0.25);
+      transform: scale(1.08); box-shadow: 0 0 10px rgba(255,255,255,0.5);
+    }
+    .slot-icon { width: 24px; height: 24px; margin-bottom: 2px; border-radius: 2px; }
+
+    /* Controls Overlay Info */
+    #info-panel {
+      position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.6);
+      color: #fff; padding: 12px 16px; border-radius: 8px; font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(4px);
+    }
+
+    /* Start / Menu UI */
+    #menu-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.7)),
+                  radial-gradient(circle, rgba(24,32,48,1) 0%, rgba(10,12,18,1) 100%);
+      z-index: 100; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; color: white;
+    }
+    #menu-card {
+      background: rgba(30, 30, 35, 0.85); border: 2px solid #444; border-radius: 12px;
+      padding: 40px; text-align: center; width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,0.8);
+      backdrop-filter: blur(8px);
+    }
+    h1 { font-size: 32px; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 3px; color: #4CAF50; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+    .btn {
+      width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 6px;
+      background: #4CAF50; color: white; font-size: 15px; font-weight: bold;
+      cursor: pointer; transition: background 0.2s, transform 0.1s;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .btn:hover { background: #45a049; transform: translateY(-2px); }
+    .btn:active { transform: translateY(0); }
+    .btn-secondary { background: #2196F3; }
+    .btn-secondary:hover { background: #0b7dda; }
+    .btn-danger { background: #f44336; }
+    .btn-danger:hover { background: #da190b; }
+    
+    #notification {
+      position: absolute; top: 20px; right: 20px; background: #4CAF50; color: white;
+      padding: 12px 20px; border-radius: 6px; font-weight: bold; font-size: 14px;
+      opacity: 0; transition: opacity 0.3s; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Menu Inicial -->
+  <div id="menu-overlay">
+    <div id="menu-card">
+      <h1>MINECRAFT JS</h1>
+      <button class="btn" id="btn-start">Novo Mundo</button>
+      <button class="btn btn-secondary" id="btn-load">Carregar Mundo</button>
+      <button class="btn btn-danger" id="btn-clear" style="font-size:11px; margin-top:15px; padding:8px;">Deletar Save</button>
+    </div>
+  </div>
+
+  <div id="notification">Mundo Salvo!</div>
+
+  <!-- HUD do Jogo -->
+  <div id="crosshair"></div>
+  <div id="hud">
+    <div id="info-panel">
+      <b>[W,A,S,D]</b> Mover | <b>[Espaço]</b> Pular<br>
+      <b>[Clique Esquerdo]</b> Quebrar | <b>[Clique Direito]</b> Colocar<br>
+      <b>[Scroll]</b> Mudar Bloco | <b>[G]</b> Salvar Mundo
+    </div>
+
+    <div>
+      <div class="status-bars">
+        <!-- Corações (SVG) -->
+        <div class="bar-group" id="health-bar"></div>
+        <!-- Fome (SVG) -->
+        <div class="bar-group" id="food-bar"></div>
+      </div>
+      <div id="hotbar-container"></div>
+    </div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <!-- Libs via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
+
+  <script>
+    // --- 1. GERADOR PROCEDURAL DE TEXTURAS REALISTAS (CANVAS 2D) ---
+    function createNoiseTexture(baseColor, noiseFactor = 30, pattern = 'grass') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, 64, 64);
+
+      const imgData = ctx.getImageData(0, 0, 64, 64);
+      const data = imgData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const noise = (Math.random() - 0.5) * noiseFactor;
+        data[i] = Math.min(255, Math.max(0, data[i] + noise));
+        data[i+1] = Math.min(255, Math.max(0, data[i+1] + noise));
+        data[i+2] = Math.min(255, Math.max(0, data[i+2] + noise));
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      // Padrões extras
+      if (pattern === 'brick') {
+        ctx.strokeStyle = '#3a3a3a';
+        ctx.lineWidth = 2;
+        for(let y=0; y<64; y+=16) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(64, y); ctx.stroke();
+          const offset = (y/16) % 2 === 0 ? 0 : 16;
+          for(let x=offset; x<64; x+=32) {
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y+16); ctx.stroke();
+          }
+        }
+      } else if (pattern === 'wood') {
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        for(let y=0; y<64; y+=8) ctx.fillRect(0, y, 64, 2);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      return texture;
+    }
+
+    // Texturas dos Blocos
+    const textures = {
+      dirt: createNoiseTexture('#5c4033', 25),
+      grassTop: createNoiseTexture('#43a047', 20),
+      stone: createNoiseTexture('#757575', 35),
+      sand: createNoiseTexture('#d7ccc8', 20),
+      snow: createNoiseTexture('#eceff1', 10),
+      wood: createNoiseTexture('#4e342e', 30, 'wood'),
+      leaves: createNoiseTexture('#2e7d32', 40),
+      brick: createNoiseTexture('#8d6e63', 30, 'brick')
+    };
+
+    // Materiais Multi-Lado para Blocos (Ex: Grama tem topo verde e lado de terra/grama)
+    const BLOCKS = { AIR: 0, DIRT: 1, GRASS: 2, STONE: 3, SAND: 4, SNOW: 5, WOOD: 6, LEAVES: 7, BRICK: 8 };
+
+    function getBlockMaterials(type) {
+      const mat = (tex) => new THREE.MeshLambertMaterial({ map: tex });
+      switch(type) {
+        case BLOCKS.GRASS:
+          return [mat(textures.dirt), mat(textures.dirt), mat(textures.grassTop), mat(textures.dirt), mat(textures.dirt), mat(textures.dirt)];
+        case BLOCKS.DIRT: return mat(textures.dirt);
+        case BLOCKS.STONE: return mat(textures.stone);
+        case BLOCKS.SAND: return mat(textures.sand);
+        case BLOCKS.SNOW: return mat(textures.snow);
+        case BLOCKS.WOOD: return mat(textures.wood);
+        case BLOCKS.LEAVES: return new THREE.MeshLambertMaterial({ map: textures.leaves, transparent: true, opacity: 0.9 });
+        case BLOCKS.BRICK: return mat(textures.brick);
+        default: return mat(textures.dirt);
+      }
+    }
+
+    // --- 2. CONFIGURAÇÃO DO MUNDO & ENGINE 3D ---
+    const WORLD_SIZE = 64;
+    const WATER_LEVEL = 7;
+    const simplex = new SimplexNoise();
+    let world = new Map();
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x78a7ff);
+    scene.fog = new THREE.FogExp2(0x78a7ff, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    // Iluminação
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+    sun.position.set(80, 120, 50);
+    sun.castShadow = true;
+    scene.add(sun);
+
+    // Água Realista Animada
+    const waterGeom = new THREE.PlaneGeometry(WORLD_SIZE * 3, WORLD_SIZE * 3, 64, 64);
+    const waterMat = new THREE.MeshPhongMaterial({
+      color: 0x0077be, transparent: true, opacity: 0.65, shininess: 90, side: THREE.DoubleSide
+    });
+    const waterMesh = new THREE.Mesh(waterGeom, waterMat);
+    waterMesh.rotation.x = -Math.PI / 2;
+    waterMesh.position.set(WORLD_SIZE/2, WATER_LEVEL - 0.2, WORLD_SIZE/2);
+    scene.add(waterMesh);
+
+    // --- 3. GERAÇÃO MELHORADA DE TERRENO (OCTAVE NOISE FRACTAL) ---
+    function getNoise2D(x, z, octaves = 3, persistence = 0.5) {
+      let total = 0, frequency = 0.015, amplitude = 1, maxValue = 0;
+      for(let i = 0; i < octaves; i++) {
+        total += simplex.noise2D(x * frequency, z * frequency) * amplitude;
+        maxValue += amplitude;
+        amplitude *= persistence;
+        frequency *= 2;
+      }
+      return total / maxValue;
+    }
+
+    function getKey(x, y, z) { return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; }
+    function setBlock(x, y, z, type) {
+      if (type === BLOCKS.AIR) world.delete(getKey(x, y, z));
+      else world.set(getKey(x, y, z), type);
+    }
+    function getBlock(x, y, z) { return world.get(getKey(x, y, z)) || BLOCKS.AIR; }
+
+    function generateTerrain() {
+      world.clear();
+      for (let x = 0; x < WORLD_SIZE; x++) {
+        for (let z = 0; z < WORLD_SIZE; z++) {
+          let elevation = getNoise2D(x, z, 4, 0.5);
+          let h = Math.floor(WATER_LEVEL + elevation * 15 + 3);
+
+          // Biomas
+          let temperature = simplex.noise2D(x * 0.005, z * 0.005);
+
+          for (let y = 0; y <= h; y++) {
+            // Cavernas com 3D Noise
+            let caveNoise = simplex.noise2D(x * 0.08, y * 0.08);
+            if (y < h && y > 2 && caveNoise > 0.65) continue; 
+
+            if (y < h - 3) setBlock(x, y, z, BLOCKS.STONE);
+            else if (y < h) setBlock(x, y, z, temperature > 0.3 ? BLOCKS.SAND : BLOCKS.DIRT);
+            else {
+              if (h <= WATER_LEVEL + 1) setBlock(x, y, z, BLOCKS.SAND);
+              else if (temperature < -0.2) setBlock(x, y, z, BLOCKS.SNOW);
+              else setBlock(x, y, z, BLOCKS.GRASS);
+            }
+          }
+
+          // Árvores Procedurais
+          if (temperature >= -0.2 && temperature <= 0.3 && h > WATER_LEVEL + 1) {
+            if (Math.random() < 0.015) generateTree(x, h + 1, z);
+          }
+        }
+      }
+      rebuildMeshes();
+    }
+
+    function generateTree(x, y, z) {
+      const height = 4 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < height; i++) setBlock(x, y + i, z, BLOCKS.WOOD);
+      for (let lx = -2; lx <= 2; lx++) {
+        for (let lz = -2; lz <= 2; lz++) {
+          for (let ly = height - 2; ly <= height + 1; ly++) {
+            if (Math.abs(lx) === 2 && Math.abs(lz) === 2) continue;
+            if (getBlock(x + lx, y + ly, z + lz) === BLOCKS.AIR) setBlock(x + lx, y + ly, z + lz, BLOCKS.LEAVES);
+          }
+        }
+      }
+    }
+
+    // Instanced Mesh para Renderização Ultra Rápida
+    let renderedMeshes = [];
+    function rebuildMeshes() {
+      renderedMeshes.forEach(m => scene.remove(m));
+      renderedMeshes = [];
+
+      const geom = new THREE.BoxGeometry(1, 1, 1);
+      const instancesMap = new Map();
+
+      world.forEach((type, key) => {
+        const [x, y, z] = key.split(',').map(Number);
+        // Culling simples: Não desenhar se cercado
+        if (getBlock(x+1,y,z) && getBlock(x-1,y,z) && getBlock(x,y+1,z) &&
+            getBlock(x,y-1,z) && getBlock(x,y,z+1) && getBlock(x,y,z-1)) return;
+
+        if (!instancesMap.has(type)) instancesMap.set(type, []);
+        instancesMap.get(type).push(new THREE.Vector3(x, y, z));
+      });
+
+      const dummy = new THREE.Object3D();
+      instancesMap.forEach((positions, type) => {
+        const mat = getBlockMaterials(type);
+        const mesh = new THREE.InstancedMesh(geom, mat, positions.length);
+        positions.forEach((pos, idx) => {
+          dummy.position.copy(pos);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(idx, dummy.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        scene.add(mesh);
+        renderedMeshes.push(mesh);
+      });
+    }
+
+    // --- 4. MOBS & IA (PORCOS E ZUMBIS HOSTIS) ---
+    const mobs = [];
+    function spawnMob(x, y, z, isHostile = false) {
+      const group = new THREE.Group();
+      const color = isHostile ? 0x2e7d32 : 0xf48fb1; // Verde para Zumbi, Rosa para Porco
+      const mat = new THREE.MeshLambertMaterial({ color });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 1.2), mat);
+      body.position.y = 0.6;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), mat);
+      head.position.set(0, 1.1, 0.4);
+
+      group.add(body); group.add(head);
+      group.position.set(x, y, z);
+      scene.add(group);
+
+      mobs.push({ mesh: group, isHostile, vx: 0, vz: 0, changeTimer: 0 });
+    }
+
+    function updateMobs() {
+      mobs.forEach(mob => {
+        mob.changeTimer--;
+        if (mob.isHostile) {
+          // Persegue o jogador
+          const dir = new THREE.Vector3().subVectors(playerPos, mob.mesh.position);
+          dir.y = 0;
+          if (dir.length() < 12) {
+            dir.normalize();
+            mob.mesh.position.x += dir.x * 0.03;
+            mob.mesh.position.z += dir.z * 0.03;
+            mob.mesh.lookAt(playerPos.x, mob.mesh.position.y, playerPos.z);
+            
+            // Dano no Jogador
+            if (mob.mesh.position.distanceTo(playerPos) < 1.2 && Math.random() < 0.05) {
+              playerHealth = Math.max(0, playerHealth - 1);
+              updateHUD();
+            }
+          }
+        } else {
+          // Movimento Aleatório
+          if (mob.changeTimer <= 0) {
+            mob.vx = (Math.random() - 0.5) * 0.02;
+            mob.vz = (Math.random() - 0.5) * 0.02;
+            mob.changeTimer = Math.floor(Math.random() * 100) + 50;
+          }
+          mob.mesh.position.x += mob.vx;
+          mob.mesh.position.z += mob.vz;
+        }
+      });
+    }
+
+    // --- 5. JOGADOR & FÍSICA AABB (ALTURA AJUSTADA) ---
+    // Altura do jogador corrigida: olhos a 1.62m de altura em relação aos pés
+    let playerPos = new THREE.Vector3(WORLD_SIZE/2, 20, WORLD_SIZE/2);
+    let playerVel = new THREE.Vector3(0,0,0);
+    let isGrounded = false;
+    let playerHealth = 10;
+    let playerFood = 10;
+
+    let moveF = false, moveB = false, moveL = false, moveR = false;
+
+    function updatePlayerPhysics() {
+      playerVel.y -= 0.01; // Gravidade
+
+      const speed = 0.1;
+      const dir = new THREE.Vector3();
+      if (moveF) dir.z -= 1;
+      if (moveB) dir.z += 1;
+      if (moveL) dir.x -= 1;
+      if (moveR) dir.x += 1;
+      dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), camera.rotation.y);
+
+      // Colisão AABB Básica
+      playerPos.x += dir.x * speed;
+      if (checkCollision(playerPos)) playerPos.x -= dir.x * speed;
+
+      playerPos.z += dir.z * speed;
+      if (checkCollision(playerPos)) playerPos.z -= dir.z * speed;
+
+      playerPos.y += playerVel.y;
+      if (checkCollision(playerPos)) {
+        if (playerVel.y < 0) isGrounded = true;
+        playerPos.y -= playerVel.y;
+        playerVel.y = 0;
+      } else { isGrounded = false; }
+
+      // Câmera posicionada na altura dos olhos
+      camera.position.set(playerPos.x, playerPos.y + 1.62, playerPos.z);
+    }
+
+    function checkCollision(pos) {
+      const minX = pos.x - 0.3, maxX = pos.x + 0.3;
+      const minY = pos.y, maxY = pos.y + 1.8;
+      const minZ = pos.z - 0.3, maxZ = pos.z + 0.3;
+
+      for (let x = Math.floor(minX); x <= Math.floor(maxX); x++) {
+        for (let y = Math.floor(minY); y <= Math.floor(maxY); y++) {
+          for (let z = Math.floor(minZ); z <= Math.floor(maxZ); z++) {
+            if (getBlock(x, y, z) !== BLOCKS.AIR) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // --- 6. HUD COM ÍCONES SVG E SELEÇÃO DE BLOCOS ---
+    const heartSVG = `<svg class="icon-svg" viewBox="0 0 24 24"><path fill="#f44336" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+    const foodSVG = `<svg class="icon-svg" viewBox="0 0 24 24"><path fill="#ff9800" d="M18.06 23h1.66c.84 0 1.53-.65 1.63-1.47L23 5.05h-5V1h-1.97v4.05h-4.97l.3 2.34c1.71.47 3.31 1.32 4.27 2.26 1.44 1.42 2.43 3.55 2.43 6.35 0 2.1-.8 3.9-1.97 5.05l.03 2.25zM1 18v3c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2v-3H1z"/></svg>`;
+
+    function updateHUD() {
+      const hBar = document.getElementById('health-bar');
+      const fBar = document.getElementById('food-bar');
+      hBar.innerHTML = heartSVG.repeat(playerHealth);
+      fBar.innerHTML = foodSVG.repeat(playerFood);
+    }
+
+    const selectableBlocks = [
+      { type: BLOCKS.DIRT, name: 'Terra', color: '#5c4033' },
+      { type: BLOCKS.GRASS, name: 'Grama', color: '#43a047' },
+      { type: BLOCKS.STONE, name: 'Pedra', color: '#757575' },
+      { type: BLOCKS.SAND, name: 'Areia', color: '#d7ccc8' },
+      { type: BLOCKS.WOOD, name: 'Madeira', color: '#4e342e' },
+      { type: BLOCKS.BRICK, name: 'Tijolo', color: '#8d6e63' }
+    ];
+    let selectedBlockIndex = 0;
+
+    function setupHotbar() {
+      const container = document.getElementById('hotbar-container');
+      container.innerHTML = '';
+      selectableBlocks.forEach((b, idx) => {
+        const slot = document.createElement('div');
+        slot.className = `slot ${idx === selectedBlockIndex ? 'selected' : ''}`;
+        slot.innerHTML = `<div class="slot-icon" style="background:${b.color}"></div>${b.name}`;
+        container.appendChild(slot);
+      });
+    }
+
+    // --- 7. SISTEMA DE SAVE / LOAD ---
+    function saveWorld() {
+      const data = {
+        world: Array.from(world.entries()),
+        playerPos: { x: playerPos.x, y: playerPos.y, z: playerPos.z }
+      };
+      localStorage.setItem('mc_js_save', JSON.stringify(data));
+      showNotification("Mundo Salvo com Sucesso!");
+    }
+
+    function loadWorld() {
+      const saved = localStorage.getItem('mc_js_save');
+      if (!saved) { alert("Nenhum save encontrado!"); return false; }
+      
+      const data = JSON.parse(saved);
+      world = new Map(data.world);
+      playerPos.set(data.playerPos.x, data.playerPos.y, data.playerPos.z);
+      rebuildMeshes();
+      showNotification("Mundo Carregado!");
+      return true;
+    }
+
+    function showNotification(msg) {
+      const el = document.getElementById('notification');
+      el.innerText = msg; el.style.opacity = 1;
+      setTimeout(() => el.style.opacity = 0, 2500);
+    }
+
+    // --- 8. INPUTS & EVENTOS ---
+    document.addEventListener('keydown', e => {
+      if (e.code === 'KeyW') moveF = true;
+      if (e.code === 'KeyS') moveB = true;
+      if (e.code === 'KeyA') moveL = true;
+      if (e.code === 'KeyD') moveR = true;
+      if (e.code === 'Space' && isGrounded) { playerVel.y = 0.18; isGrounded = false; }
+      if (e.code === 'KeyG') saveWorld();
+    });
+
+    document.addEventListener('keyup', e => {
+      if (e.code === 'KeyW') moveF = false;
+      if (e.code === 'KeyS') moveB = false;
+      if (e.code === 'KeyA') moveL = false;
+      if (e.code === 'KeyD') moveR = false;
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (document.pointerLockElement === document.body) {
+        camera.rotation.y -= e.movementX * 0.002;
+        camera.rotation.x -= e.movementY * 0.002;
+        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+        camera.rotation.order = "YXZ";
+      }
+    });
+
+    window.addEventListener('wheel', e => {
+      if (e.deltaY > 0) selectedBlockIndex = (selectedBlockIndex + 1) % selectableBlocks.length;
+      else selectedBlockIndex = (selectedBlockIndex - 1 + selectableBlocks.length) % selectableBlocks.length;
+      setupHotbar();
+    });
+
+    // Raycast (Quebrar / Colocar blocos)
+    const raycaster = new THREE.Raycaster();
+    window.addEventListener('mousedown', e => {
+      if (document.pointerLockElement !== document.body) return;
+      
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const intersects = [];
+
+      world.forEach((type, key) => {
+        const [x, y, z] = key.split(',').map(Number);
+        const box = new THREE.Box3(new THREE.Vector3(x-0.5, y-0.5, z-0.5), new THREE.Vector3(x+0.5, y+0.5, z+0.5));
+        const pt = new THREE.Vector3();
+        if (raycaster.ray.intersectBox(box, pt)) {
+          if (camera.position.distanceTo(pt) < 6) intersects.push({ x, y, z, dist: camera.position.distanceTo(pt), pt });
+        }
+      });
+
+      if (intersects.length > 0) {
+        intersects.sort((a,b) => a.dist - b.dist);
+        const hit = intersects[0];
+
+        if (e.button === 0) { // Destruir Bloco
+          setBlock(hit.x, hit.y, hit.z, BLOCKS.AIR);
+          rebuildMeshes();
+        } else if (e.button === 2) { // Colocar Bloco
+          const norm = hit.pt.clone().sub(new THREE.Vector3(hit.x, hit.y, hit.z)).normalize();
+          const nx = hit.x + Math.round(norm.x);
+          const ny = hit.y + Math.round(norm.y);
+          const nz = hit.z + Math.round(norm.z);
+          setBlock(nx, ny, nz, selectableBlocks[selectedBlockIndex].type);
+          rebuildMeshes();
+        }
+      }
+    });
+    window.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Menu Buttons
+    document.getElementById('btn-start').addEventListener('click', () => {
+      document.getElementById('menu-overlay').style.display = 'none';
+      generateTerrain();
+      spawnMob(WORLD_SIZE/2 + 3, 15, WORLD_SIZE/2 + 3, true); // Zumbi Hostil
+      spawnMob(WORLD_SIZE/2 - 3, 15, WORLD_SIZE/2 - 3, false); // Porco Passivo
+      document.body.requestPointerLock();
+    });
+
+    document.getElementById('btn-load').addEventListener('click', () => {
+      if (loadWorld()) {
+        document.getElementById('menu-overlay').style.display = 'none';
+        document.body.requestPointerLock();
+      }
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      localStorage.removeItem('mc_js_save');
+      showNotification("Save Apagado!");
+    });
+
+    // --- 9. LOOP PRINCIPAL ---
+    setupHotbar();
+    updateHUD();
+
+    function animate(t) {
+      requestAnimationFrame(animate);
+
+      if (document.pointerLockElement === document.body) {
+        updatePlayerPhysics();
+        updateMobs();
+      }
+
+      // Animação da Água
+      const pos = waterGeom.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const u = pos.getX(i), v = pos.getY(i);
+        pos.setZ(i, Math.sin(u * 0.4 + t * 0.002) * 0.08 + Math.cos(v * 0.4 + t * 0.0015) * 0.08);
+      }
+      pos.needsUpdate = true;
+
+      renderer.render(scene, camera);
+    }
+    animate(0);
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
