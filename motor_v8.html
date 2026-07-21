@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulação 3D Motor V8 High Performance - Three.js</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #08090c;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #ffffff;
+    }
+    #webgl-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    /* Header UI Glassmorphism */
+    .overlay-ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .card {
+      background: rgba(18, 22, 31, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px 22px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      background: linear-gradient(45deg, #00f0ff, #7000ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    p.subtitle {
+      font-size: 0.8rem;
+      color: #a0aab8;
+    }
+    .telemetry {
+      display: flex;
+      gap: 15px;
+      margin-top: 12px;
+    }
+    .metric {
+      display: flex;
+      flex-direction: column;
+    }
+    .metric .label {
+      font-size: 0.65rem;
+      color: #6c7a89;
+      text-transform: uppercase;
+    }
+    .metric .value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #00f0ff;
+      font-family: monospace;
+    }
+    /* Customization for lil-gui position */
+    .lil-gui {
+      --background-color: rgba(15, 18, 25, 0.85) !important;
+      --text-color: #e0e6ed !important;
+      --title-background-color: rgba(30, 36, 50, 0.9) !important;
+      --widget-color: rgba(255, 255, 255, 0.08) !important;
+      --hover-color: rgba(0, 240, 255, 0.3) !important;
+      --focus-color: #00f0ff !important;
+      --number-color: #00f0ff !important;
+      --string-color: #ff0055 !important;
+      font-family: inherit !important;
+      border-radius: 10px !important;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+      position: absolute !important;
+      top: 20px !important;
+      right: 20px !important;
+    }
+    /* Quick Action Bar */
+    .action-bar {
+      position: absolute;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+    }
+    .btn {
+      background: rgba(20, 26, 38, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover {
+      background: rgba(0, 240, 255, 0.2);
+      border-color: #00f0ff;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+      transform: translateY(-2px);
+    }
+    .btn:active {
+      transform: translateY(0);
+    }
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #08090c;
+      z-index: 99;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.5s ease;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(0,240,255,0.1);
+      border-top-color: #00f0ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 15px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <div style="color: #00f0ff; letter-spacing: 2px; font-size: 0.9rem;">CARREGANDO MOTOR V8...</div>
+  </div>
+
+  <div id="webgl-container"></div>
+
+  <div class="overlay-ui">
+    <div class="card">
+      <h1>Motor V8 Cross-Plane</h1>
+      <p class="subtitle">Simulação Cinemática 3D em Tempo Real</p>
+      <div class="telemetry">
+        <div class="metric">
+          <span class="label">Rotação</span>
+          <span class="value" id="val-rpm">1200 RPM</span>
+        </div>
+        <div class="metric">
+          <span class="label">Cilindros</span>
+          <span class="value">8 Em V (90°)</span>
+        </div>
+        <div class="metric">
+          <span class="label">Vel. Pistão</span>
+          <span class="value" id="val-speed">8.4 m/s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn" onclick="setPreset('default')">🎥 Vista Geral</button>
+    <button class="btn" onclick="setPreset('crank')">⚙️ Vira-brequim</button>
+    <button class="btn" onclick="setPreset('piston')">🔍 Pistão Foco</button>
+    <button class="btn" onclick="toggleExplode()">💥 Explodir/Montar</button>
+  </div>
+
+  <!-- Bibliothecas CDN (Three.js, OrbitControls, lil-gui) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.18"></script>
+
+  <script>
+    // --- PARÂMETROS E CONFIGURAÇÕES DA CINEMÁTICA V8 ---
+    const CONFIG = {
+      rpm: 1200,
+      explodedFactor: 0.0,
+      transparentBlock: true,
+      wireframe: false,
+      showSupercharger: true,
+      showExhaust: true,
+      autoRotate: false,
+      colorValveCovers: '#cc1111',
+      colorBlock: '#3a3d45'
+    };
+
+    // Dimensões do Motor
+    const BORE_ANGLE = Math.PI / 4; // 45 graus para cada lado (V90)
+    const CRANK_RADIUS = 0.85;       // Raio do vira-brequim (Metade do curso)
+    const ROD_LENGTH = 3.2;          // Comprimento da biela
+    const CYL_SPACING = 1.35;        // Distância Z entre cilindros
+    const Z_START = -2.3;            // Posição Z inicial
+
+    // Variáveis Globais
+    let scene, camera, renderer, controls, gui;
+    let crankAngle = 0;
+    const clock = new THREE.Clock();
+
+    // Arrays para Animação e Materiais
+    const dynamicComponents = [];
+    const materials = {};
+    let crankshaftGroup, engineBlockGroup, superchargerGroup, exhaustGroup;
+    let valveCoverLeft, valveCoverRight, headLeft, headRight;
+
+    // --- INICIALIZAÇÃO DA CENA ---
+    function init() {
+      const container = document.getElementById('webgl-container');
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      container.appendChild(renderer.domElement);
+
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0c10);
+      scene.fog = new THREE.FogExp2(0x0a0c10, 0.025);
+
+      // Camera
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(9, 6, 9);
+
+      // Controls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2 + 0.1; // Não ir muito abaixo do chão
+      controls.minDistance = 3;
+      controls.maxDistance = 25;
+      controls.target.set(0, 0.5, 0);
+
+      // Gerar Ambiente de Reflexão (Studio HDRI dinâmico sem imagens externas)
+      setupEnvironment();
+
+      // Iluminação
+      setupLighting();
+
+      // Materiais PBR
+      initMaterials();
+
+      // Construção do Chão e Pedestal
+      buildEnvironment();
+
+      // Construção do Motor V8
+      buildV8Engine();
+
+      // Configuração do Painel GUI
+      setupGUI();
+
+      // Eventos
+      window.addEventListener('resize', onWindowResize);
+
+      // Remover tela de carregamento
+      setTimeout(() => {
+        const loader = document.getElementById('loading');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.style.display = 'none', 500);
+      }, 600);
+
+      // Loop de Animação
+      animate();
+    }
+
+    // --- AMBIENTE DE REFLEXÃO PBR SINTÉTICO ---
+    function setupEnvironment() {
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
+      pmremGenerator.compileEquirectangularShader();
+
+      const envScene = new THREE.Scene();
+      
+      // Luzes virtuais de estúdio para reflexos reflexivos no metal
+      const light1 = new THREE.DirectionalLight(0xffffff, 4);
+      light1.position.set(5, 10, 5);
+      envScene.add(light1);
+
+      const light2 = new THREE.DirectionalLight(0x00d0ff, 2);
+      light2.position.set(-5, -5, -5);
+      envScene.add(light2);
+
+      const light3 = new THREE.DirectionalLight(0xff4400, 1.5);
+      light3.position.set(0, -10, 5);
+      envScene.add(light3);
+
+      const envMap = pmremGenerator.fromScene(envScene).texture;
+      scene.environment = envMap;
+      pmremGenerator.dispose();
+    }
+
+    // --- ILUMINAÇÃO PROFISSIONAL COM SOMBRAS ---
+    function setupLighting() {
+      // Luz Ambiente Suave
+      const ambientLight = new THREE.AmbientLight(0xddeeff, 0.6);
+      scene.add(ambientLight);
+
+      // Luz Principal (Luz de Sol/Estúdio com Sombra)
+      const mainLight = new THREE.DirectionalLight(0xffffff, 2.2);
+      mainLight.position.set(8, 12, 6);
+      mainLight.castShadow = true;
+      mainLight.shadow.mapSize.width = 2048;
+      mainLight.shadow.mapSize.height = 2048;
+      mainLight.shadow.bias = -0.0001;
+      mainLight.shadow.camera.near = 1;
+      mainLight.shadow.camera.far = 30;
+      mainLight.shadow.camera.left = -6;
+      mainLight.shadow.camera.right = 6;
+      mainLight.shadow.camera.top = 6;
+      mainLight.shadow.camera.bottom = -6;
+      scene.add(mainLight);
+
+      // Luz de Preenchimento Azulada
+      const fillLight = new THREE.DirectionalLight(0x3388ff, 1.2);
+      fillLight.position.set(-8, 6, -6);
+      scene.add(fillLight);
+
+      // Luz Quente Dramática Interna (Efeito do cárter)
+      const crankLight = new THREE.PointLight(0xffaa44, 2, 8);
+      crankLight.position.set(0, -0.5, 0);
+      scene.add(crankLight);
+    }
+
+    // --- CRIAÇÃO DOS MATERIAIS PBR DE ALTA FIDELIDADE ---
+    function initMaterials() {
+      // Cromo Polido (Vira-brequim, escapamento, detalhes)
+      materials.chrome = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        metalness: 0.98,
+        roughness: 0.05,
+        name: 'chrome'
+      });
+
+      // Alumínio Escovado (Pistões, Bielas)
+      materials.aluminum = new THREE.MeshStandardMaterial({
+        color: 0xdddddd,
+        metalness: 0.85,
+        roughness: 0.25,
+        name: 'aluminum'
+      });
+
+      // Ferro Fundido Escuro (Bloco do Motor)
+      materials.castIron = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(CONFIG.colorBlock),
+        metalness: 0.6,
+        roughness: 0.45,
+        transparent: true,
+        opacity: CONFIG.transparentBlock ? 0.45 : 1.0,
+        wireframe: CONFIG.wireframe,
+        depthWrite: !CONFIG.transparentBlock
+      });
+
+      // Camisas do Cilindro (Vidro/Acrílico Translúcido)
+      materials.cylinderLiner = new THREE.MeshPhysicalMaterial({
+        color: 0x77bbff,
+        metalness: 0.1,
+        roughness: 0.1,
+        transmission: 0.7,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false
+      });
+
+      // Tampas de Válvula Vermelhas (Anodizadas)
+      materials.valveCover = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(CONFIG.colorValveCovers),
+        metalness: 0.7,
+        roughness: 0.2,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.1
+      });
+
+      // Aço Forjado Escuro
+      materials.darkSteel = new THREE.MeshStandardMaterial({
+        color: 0x22252a,
+        metalness: 0.8,
+        roughness: 0.4
+      });
+
+      // Ouro / Latão (Velas, acoplamentos)
+      materials.brass = new THREE.MeshStandardMaterial({
+        color: 0xcc9933,
+        metalness: 0.9,
+        roughness: 0.2
+      });
+
+      // Borracha Preta (Correias)
+      materials.rubber = new THREE.MeshStandardMaterial({
+        color: 0x111113,
+        metalness: 0.0,
+        roughness: 0.9
+      });
+    }
+
+    // --- BASE E PISO DA CENA ---
+    function buildEnvironment() {
+      // Chão Espelhado Escuro
+      const floorGeo = new THREE.PlaneGeometry(40, 40);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x07080a,
+        roughness: 0.3,
+        metalness: 0.8
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -3.2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      // Grade Tecnológica
+      const grid = new THREE.GridHelper(30, 30, 0x00f0ff, 0x1e2638);
+      grid.position.y = -3.19;
+      scene.add(grid);
+    }
+
+    // --- CONSTRUÇÃO COMPLETA DO MOTOR V8 ---
+    function buildV8Engine() {
+      crankshaftGroup = new THREE.Group();
+      engineBlockGroup = new THREE.Group();
+      superchargerGroup = new THREE.Group();
+      exhaustGroup = new THREE.Group();
+
+      scene.add(crankshaftGroup);
+      scene.add(engineBlockGroup);
+      scene.add(superchargerGroup);
+      scene.add(exhaustGroup);
+
+      // 1. VIRA-BREQUIM (Crankshaft Cross-Plane V8)
+      buildCrankshaft();
+
+      // 2. CONJUNTO DE PISTÕES, BIELAS E CILINDROS (8 Cilindros)
+      buildPistonsAndRods();
+
+      // 3. BLOCO DO MOTOR & CABEÇOTES
+      buildEngineBlock();
+
+      // 4. SISTEMA DE ADMISSÃO / SUPERCHARGER
+      buildSupercharger();
+
+      // 5. COLETOR DE ESCAPE (HEADERS)
+      buildExhaustHeaders();
+    }
+
+    // 1. MODELAGEM DO VIRA-BREQUIM
+    function buildCrankshaft() {
+      const crankMainAxisGeo = new THREE.CylinderGeometry(0.35, 0.35, 6.8, 32);
+      const mainShaft = new THREE.Mesh(crankMainAxisGeo, materials.chrome);
+      mainShaft.rotation.x = Math.PI / 2;
+      mainShaft.castShadow = true;
+      crankshaftGroup.add(mainShaft);
+
+      // Ângulos Cross-Plane V8 Padrão (0°, 90°, 270°, 180°)
+      const journalAngles = [0, Math.PI / 2, 3 * Math.PI / 2, Math.PI];
+
+      for (let i = 0; i < 4; i++) {
+        const zPos = Z_START + i * (CYL_SPACING * 2) + CYL_SPACING / 2;
+        const angle = journalAngles[i];
+
+        // Braço do Vira-brequim / Contrapesos (Counterweights)
+        const webShape = new THREE.Shape();
+        webShape.absarc(0, 0, 0.95, Math.PI * 0.7, Math.PI * 2.3, false);
+        webShape.lineTo(0, 0);
+
+        const extrudeSettings = { depth: 0.25, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.05, bevelThickness: 0.05 };
+        const webGeo = new THREE.ExtrudeGeometry(webShape, extrudeSettings);
+
+        const web1 = new THREE.Mesh(webGeo, materials.chrome);
+        web1.position.set(0, 0, zPos - 0.2);
+        web1.rotation.z = angle + Math.PI; // Contrapeso oposto
+        web1.castShadow = true;
+        crankshaftGroup.add(web1);
+
+        const web2 = web1.clone();
+        web2.position.z = zPos + 0.2;
+        crankshaftGroup.add(web2);
+
+        // Pino do Vira-Brequim (Crankpin Journal)
+        const pinGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.4, 24);
+        const pin = new THREE.Mesh(pinGeo, materials.chrome);
+        pin.rotation.x = Math.PI / 2;
+        pin.position.set(CRANK_RADIUS * Math.cos(angle), CRANK_RADIUS * Math.sin(angle), zPos);
+        pin.castShadow = true;
+        crankshaftGroup.add(pin);
+      }
+
+      // Polia Dianteira (Crankshaft Pulley)
+      const pulleyGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.3, 32);
+      const pulley = new THREE.Mesh(pulleyGeo, materials.darkSteel);
+      pulley.rotation.x = Math.PI / 2;
+      pulley.position.z = Z_START - 0.6;
+      crankshaftGroup.add(pulley);
+    }
+
+    // 2. CONJUNTO PISTÕES, BIELAS E CINEMÁTICA
+    function buildPistonsAndRods() {
+      // Ângulos de cada pino no vira-brequim para os 8 cilindros
+      const crankOffsets = [
+        0, 0,                             // Cilindros 1 e 2
+        Math.PI / 2, Math.PI / 2,         // Cilindros 3 e 4
+        3 * Math.PI / 2, 3 * Math.PI / 2, // Cilindros 5 e 6
+        Math.PI, Math.PI                  // Cilindros 7 e 8
+      ];
+
+      // Alternância dos bancos: 1 = Direita (+45°), -1 = Esquerda (-45°)
+      const bankSides = [1, -1, 1, -1, 1, -1, 1, -1];
+
+      for (let i = 0; i < 8; i++) {
+        const side = bankSides[i];
+        const bankAngle = side * BORE_ANGLE;
+        const zPos = Z_START + i * CYL_SPACING;
+
+        // --- MESH DO PISTÃO ---
+        const pistonGroup = new THREE.Group();
+        
+        // Coroa/Corpo do Pistão
+        const crownGeo = new THREE.CylinderGeometry(0.68, 0.68, 0.8, 32);
+        const crown = new THREE.Mesh(crownGeo, materials.aluminum);
+        crown.castShadow = true;
+        pistonGroup.add(crown);
+
+        // Anéis de Vedação (Grooves)
+        for (let r = 0; r < 3; r++) {
+          const ringGeo = new THREE.TorusGeometry(0.685, 0.015, 8, 32);
+          const ring = new THREE.Mesh(ringGeo, materials.darkSteel);
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = 0.2 - r * 0.1;
+          pistonGroup.add(ring);
+        }
+
+        // Pino do Pistão (Wrist Pin)
+        const pinGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.1, 16);
+        const pin = new THREE.Mesh(pinGeo, materials.chrome);
+        pin.rotation.z = Math.PI / 2;
+        pistonGroup.add(pin);
+
+        // Orientar pistão no ângulo do banco
+        pistonGroup.rotation.z = bankAngle;
+        scene.add(pistonGroup);
+
+        // --- MESH DA BIELA (Connecting Rod) ---
+        const rodGroup = new THREE.Group();
+        
+        // Corpo principal da biela (I-Beam)
+        const rodBodyGeo = new THREE.BoxGeometry(0.18, ROD_LENGTH, 0.12);
+        const rodBody = new THREE.Mesh(rodBodyGeo, materials.aluminum);
+        rodBody.position.y = ROD_LENGTH / 2;
+        rodBody.castShadow = true;
+        rodGroup.add(rodBody);
+
+        // Olho Superior (Pistão)
+        const topEyeGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.2, 20);
+        const topEye = new THREE.Mesh(topEyeGeo, materials.aluminum);
+        topEye.rotation.x = Math.PI / 2;
+        topEye.position.y = ROD_LENGTH;
+        rodGroup.add(topEye);
+
+        // Olho Inferior (Vira-brequim)
+        const bottomEyeGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.22, 20);
+        const bottomEye = new THREE.Mesh(bottomEyeGeo, materials.aluminum);
+        bottomEye.rotation.x = Math.PI / 2;
+        rodGroup.add(bottomEye);
+
+        scene.add(rodGroup);
+
+        // --- CAMISA DO CILINDRO (Liners Translúcidos) ---
+        const linerGeo = new THREE.CylinderGeometry(0.7, 0.7, 2.6, 24, 1, true);
+        const liner = new THREE.Mesh(linerGeo, materials.cylinderLiner);
+        
+        // Posição fixa do cilindro no bloco
+        const linerDist = 2.4;
+        liner.position.set(linerDist * Math.sin(bankAngle), linerDist * Math.cos(bankAngle), zPos);
+        liner.rotation.z = bankAngle;
+        engineBlockGroup.add(liner);
+
+        // Guardar dados para animação cinemática
+        dynamicComponents.push({
+          piston: pistonGroup,
+          rod: rodGroup,
+          liner: liner,
+          bankAngle: bankAngle,
+          crankOffset: crankOffsets[i],
+          zPos: zPos,
+          side: side
+        });
+      }
+    }
+
+    // 3. BLOCO DO MOTOR, CABEÇOTES E TAMPAS
+    function buildEngineBlock() {
+      // Cárter / Estrutura Inferior
+      const crankcaseGeo = new THREE.BoxGeometry(2.2, 1.2, 6.2);
+      const crankcase = new THREE.Mesh(crankcaseGeo, materials.castIron);
+      crankcase.position.set(0, -0.6, 0.3);
+      crankcase.castShadow = true;
+      crankcase.receiveShadow = true;
+      engineBlockGroup.add(crankcase);
+
+      // Banco de Cilindros Esquerdo e Direito
+      const bankGeo = new THREE.BoxGeometry(1.8, 2.2, 6.0);
+
+      // Cabeçote Esquerdo
+      headLeft = new THREE.Mesh(bankGeo, materials.castIron);
+      headLeft.position.set(-1.3, 1.5, 0.3);
+      headLeft.rotation.z = -BORE_ANGLE;
+      headLeft.castShadow = true;
+      engineBlockGroup.add(headLeft);
+
+      // Cabeçote Direito
+      headRight = new THREE.Mesh(bankGeo, materials.castIron);
+      headRight.position.set(1.3, 1.5, 0.3);
+      headRight.rotation.z = BORE_ANGLE;
+      headRight.castShadow = true;
+      engineBlockGroup.add(headRight);
+
+      // Tampas de Válvula (Valve Covers)
+      const valveCoverGeo = new THREE.BoxGeometry(1.5, 0.5, 5.8);
+
+      valveCoverLeft = new THREE.Mesh(valveCoverGeo, materials.valveCover);
+      valveCoverLeft.position.set(-2.1, 2.4, 0.3);
+      valveCoverLeft.rotation.z = -BORE_ANGLE;
+      valveCoverLeft.castShadow = true;
+      engineBlockGroup.add(valveCoverLeft);
+
+      valveCoverRight = new THREE.Mesh(valveCoverGeo, materials.valveCover);
+      valveCoverRight.position.set(2.1, 2.4, 0.3);
+      valveCoverRight.rotation.z = BORE_ANGLE;
+      valveCoverRight.castShadow = true;
+      engineBlockGroup.add(valveCoverRight);
+
+      // Velas de Ignição e Cabos de Vela (Detalhes)
+      for (let i = 0; i < 8; i++) {
+        const side = (i % 2 === 0) ? 1 : -1;
+        const zPos = Z_START + i * CYL_SPACING;
+        
+        const plugGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.5, 12);
+        const plug = new THREE.Mesh(plugGeo, materials.brass);
+        
+        const angle = side * BORE_ANGLE;
+        plug.position.set(side * 2.1, 2.3, zPos);
+        plug.rotation.z = angle;
+        engineBlockGroup.add(plug);
+      }
+    }
+
+    // 4. SUPERCHARGER / COMPRESSOR DE ADMISSÃO
+    function buildSupercharger() {
+      // Corpo Principal do Supercharger (No centro do V)
+      const bodyGeo = new THREE.BoxGeometry(1.6, 1.1, 4.2);
+      const body = new THREE.Mesh(bodyGeo, materials.chrome);
+      body.position.set(0, 2.4, 0.3);
+      body.castShadow = true;
+      superchargerGroup.add(body);
+
+      // Aletas de Refrigeração
+      for (let z = -1.5; z <= 1.8; z += 0.3) {
+        const finGeo = new THREE.BoxGeometry(1.7, 1.0, 0.05);
+        const fin = new THREE.Mesh(finGeo, materials.darkSteel);
+        fin.position.set(0, 2.4, z);
+        superchargerGroup.add(fin);
+      }
+
+      // Entrada de Ar Dupla (Blower Scoop / Bug Catcher)
+      const scoopGeo = new THREE.BoxGeometry(1.8, 0.7, 1.2);
+      const scoop = new THREE.Mesh(scoopGeo, materials.aluminum);
+      scoop.position.set(0, 3.1, -1.2);
+      superchargerGroup.add(scoop);
+
+      // Borboletas Vermelhas de Entrada de Ar
+      for (let x of [-0.4, 0.4]) {
+        const butterflyGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 20);
+        const butterfly = new THREE.Mesh(butterflyGeo, materials.valveCover);
+        butterfly.rotation.x = Math.PI / 4;
+        butterfly.position.set(x, 3.1, -1.81);
+        superchargerGroup.add(butterfly);
+      }
+
+      // Polia do Supercharger e Correia Dentada
+      const scPulleyGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.25, 32);
+      const scPulley = new THREE.Mesh(scPulleyGeo, materials.darkSteel);
+      scPulley.rotation.x = Math.PI / 2;
+      scPulley.position.set(0, 2.4, -1.85);
+      superchargerGroup.add(scPulley);
+    }
+
+    // 5. COLETOR DE ESCAPE (HEADERS CURVADOS REALISTAS)
+    function buildExhaustHeaders() {
+      for (let side of [-1, 1]) {
+        const headerGroup = new THREE.Group();
+
+        for (let i = 0; i < 4; i++) {
+          const zPos = Z_START + (i * 2 + (side === 1 ? 1 : 0)) * CYL_SPACING;
+
+          // Curva do Tubo de Escape usando CatmullRomCurve3
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(side * 1.6, 1.5, zPos),
+            new THREE.Vector3(side * 2.3, 1.2, zPos),
+            new THREE.Vector3(side * 2.5, 0.2, zPos + 0.4),
+            new THREE.Vector3(side * 2.2, -0.8, 1.8) // Coletor 4 em 1
+          ]);
+
+          const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.16, 12, false);
+          const tube = new THREE.Mesh(tubeGeo, materials.chrome);
+          tube.castShadow = true;
+          headerGroup.add(tube);
+        }
+
+        // Cano do Coletor Principal
+        const collectorGeo = new THREE.CylinderGeometry(0.32, 0.35, 2.0, 20);
+        const collector = new THREE.Mesh(collectorGeo, materials.chrome);
+        collector.position.set(side * 2.2, -1.2, 2.6);
+        collector.rotation.x = Math.PI / 3;
+        headerGroup.add(collector);
+
+        exhaustGroup.add(headerGroup);
+      }
+    }
+
+    // --- CONTROLE DE INTERFACE GRAFICA (GUI) ---
+    function setupGUI() {
+      gui = new lil.GUI({ title: '⚡ Controles do V8' });
+
+      // Rotação
+      gui.add(CONFIG, 'rpm', 0, 4000, 50).name('Rotação (RPM)').onChange(v => {
+        document.getElementById('val-rpm').innerText = `${Math.round(v)} RPM`;
+        const speed = ((v / 60) * (2 * CRANK_RADIUS * 0.0254 * 2)).toFixed(1);
+        document.getElementById('val-speed').innerText = `${speed} m/s`;
+      });
+
+      // Vista Explodida (Exploded View)
+      gui.add(CONFIG, 'explodedFactor', 0, 1, 0.01).name('Vista Explodida').listen().onChange(updateExplodedView);
+
+      // Opções do Bloco
+      const folderBlock = gui.addFolder('Bloco & Visibilidade');
+      folderBlock.add(CONFIG, 'transparentBlock').name('Bloco Translúcido').onChange(v => {
+        materials.castIron.transparent = v;
+        materials.castIron.opacity = v ? 0.45 : 1.0;
+        materials.castIron.depthWrite = !v;
+        materials.castIron.needsUpdate = true;
+      });
+
+      folderBlock.add(CONFIG, 'wireframe').name('Modo Aramado').onChange(v => {
+        materials.castIron.wireframe = v;
+        materials.aluminum.wireframe = v;
+      });
+
+      folderBlock.add(CONFIG, 'showSupercharger').name('Exibir Supercharger').onChange(v => {
+        superchargerGroup.visible = v;
+      });
+
+      folderBlock.add(CONFIG, 'showExhaust').name('Exibir Escapamento').onChange(v => {
+        exhaustGroup.visible = v;
+      });
+
+      // Cores
+      const folderColors = gui.addFolder('Customização');
+      folderColors.addColor(CONFIG, 'colorValveCovers').name('Tampas Válvula').onChange(c => {
+        materials.valveCover.color.set(c);
+      });
+      folderColors.addColor(CONFIG, 'colorBlock').name('Cor do Bloco').onChange(c => {
+        materials.castIron.color.set(c);
+      });
+
+      gui.add(CONFIG, 'autoRotate').name('Girar Câmera').onChange(v => {
+        controls.autoRotate = v;
+        controls.autoRotateSpeed = 1.5;
+      });
+
+      gui.open();
+    }
+
+    // --- LÓGICA DA VISTA EXPLODIDA (EXPLODED VIEW) ---
+    function updateExplodedView() {
+      const f = CONFIG.explodedFactor;
+
+      // Afastar Cabeçotes e Tampas
+      valveCoverLeft.position.set(-2.1 - f * 1.5, 2.4 + f * 1.8, 0.3);
+      valveCoverRight.position.set(2.1 + f * 1.5, 2.4 + f * 1.8, 0.3);
+
+      headLeft.position.set(-1.3 - f * 1.0, 1.5 + f * 1.0, 0.3);
+      headRight.position.set(1.3 + f * 1.0, 1.5 + f * 1.0, 0.3);
+
+      // Elevar Supercharger
+      superchargerGroup.position.y = f * 3.0;
+
+      // Afastar Escapamentos
+      exhaustGroup.position.x = f * 1.5;
+
+      // Afastar Camisas dos Cilindros
+      dynamicComponents.forEach(comp => {
+        const dist = 2.4 + f * 1.2;
+        comp.liner.position.x = dist * Math.sin(comp.bankAngle);
+        comp.liner.position.y = dist * Math.cos(comp.bankAngle);
+      });
+    }
+
+    // Presets de Câmera e Ações Rápidas
+    window.setPreset = function(type) {
+      if (type === 'default') {
+        animateCameraTo(new THREE.Vector3(9, 6, 9), new THREE.Vector3(0, 0.5, 0));
+      } else if (type === 'crank') {
+        animateCameraTo(new THREE.Vector3(0, 0, 8), new THREE.Vector3(0, -0.5, 0));
+      } else if (type === 'piston') {
+        animateCameraTo(new THREE.Vector3(-3.5, 3, 1), new THREE.Vector3(-1, 1.5, 0));
+      }
+    };
+
+    window.toggleExplode = function() {
+      const target = CONFIG.explodedFactor > 0.1 ? 0 : 0.85;
+      const start = CONFIG.explodedFactor;
+      const startTime = performance.now();
+
+      function anim() {
+        const now = performance.now();
+        const progress = Math.min((now - startTime) / 800, 1);
+        CONFIG.explodedFactor = THREE.MathUtils.lerp(start, target, progress);
+        updateExplodedView();
+        if (progress < 1) requestAnimationFrame(anim);
+      }
+      anim();
+    };
+
+    function animateCameraTo(targetPos, targetLookAt) {
+      const startPos = camera.position.clone();
+      const startLook = controls.target.clone();
+      const startTime = performance.now();
+
+      function anim() {
+        const now = performance.now();
+        const progress = Math.min((now - startTime) / 1000, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // Ease Out Cubic
+
+        camera.position.lerpVectors(startPos, targetPos, ease);
+        controls.target.lerpVectors(startLook, targetLookAt, ease);
+        controls.update();
+
+        if (progress < 1) requestAnimationFrame(anim);
+      }
+      anim();
+    }
+
+    // --- CÁLCULO CINEMÁTICO REAL DO PISTÃO E BIELA ---
+    function updateEngineKinematics(delta) {
+      // Atualizar Ângulo do Vira-Brequim baseado no RPM
+      const rps = CONFIG.rpm / 60;
+      crankAngle += rps * Math.PI * 2 * delta;
+
+      // Girar Vira-Brequim no eixo Z
+      crankshaftGroup.rotation.z = crankAngle;
+
+      // Atualizar cada um dos 8 Pistões e Bielas com física exata de mecanismo Biela-Manivela
+      dynamicComponents.forEach((comp) => {
+        const alpha = crankAngle + comp.crankOffset;
+
+        // Posição 2D do Pino do Vira-brequim no plano XY
+        const cx = CRANK_RADIUS * Math.cos(alpha);
+        const cy = CRANK_RADIUS * Math.sin(alpha);
+
+        // Geometria da bancada
+        const angle = comp.bankAngle;
+        const sinA = Math.sin(angle);
+        const cosA = Math.cos(angle);
+
+        // Projeção do vetor manivela no eixo do cilindro (u) e perpendicular (n)
+        const pu = cx * sinA + cy * cosA;
+        const pn = cx * cosA - cy * sinA;
+
+        // Distância d da origem até o pino do pistão (Equação exata do mecanismo)
+        const d = pu + Math.sqrt(ROD_LENGTH * ROD_LENGTH - pn * pn);
+
+        // Posição 3D final do Pistão
+        const expShiftX = sinA * CONFIG.explodedFactor * 1.2;
+        const expShiftY = cosA * CONFIG.explodedFactor * 1.2;
+
+        const pistonX = d * sinA + expShiftX;
+        const pistonY = d * cosA + expShiftY;
+        const pistonZ = comp.zPos;
+
+        comp.piston.position.set(pistonX, pistonY, pistonZ);
+
+        // Posição 3D do Pino do Vira-Brequim
+        const crankPinX = cx;
+        const crankPinY = cy;
+
+        // Posicionar Biela no centro entre o pino da manivela e o pino do pistão
+        const rodMidX = (pistonX + crankPinX) / 2;
+        const rodMidY = (pistonY + crankPinY) / 2;
+        comp.rod.position.set(rodMidX, rodMidY, pistonZ);
+
+        // Orientar Biela conectando exatamente os dois pontos
+        const deltaX = pistonX - crankPinX;
+        const deltaY = pistonY - crankPinY;
+        const rodAngle = Math.atan2(deltaY, deltaX);
+        
+        comp.rod.rotation.z = rodAngle - Math.PI / 2;
+      });
+    }
+
+    // --- LOOP DE RENDERIZAÇÃO ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+
+      // Atualizar Física/Cinemática
+      updateEngineKinematics(delta);
+
+      // Atualizar Controles Orbitais
+      controls.update();
+
+      // Renderizar Cena
+      renderer.render(scene, camera);
+    }
+
+    // --- REDIMENSIONAMENTO DE TELA ---
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Inicializar aplicação
+    window.onload = init;
+  </script>
+</body>
+</html>
